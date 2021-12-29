@@ -31,8 +31,10 @@ local GroupService = game:GetService("GroupService")
 -- DataStore
 local permissionsDataStore = DataStore:GetDataStore("permissionsDataStore")
 local permissions
-local scribeOnlyMode
+local scribeOnlyMode -- default false
+local robloxGroupId -- 0 means it is not set
 
+-- Get permissions database
 local success
 success, permissions = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."permissions") or {}
@@ -42,6 +44,7 @@ if not success then
     permissions = {}
 end
 
+-- Get scribeOnlyMode
 success, scribeOnlyMode = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
 end)
@@ -56,6 +59,14 @@ else
     print("[Admin] Whiteboards activated for guests on startup")
 end
 
+-- Get robloxGroupId
+success, robloxGroupId = pcall(function()
+    return permissionsDataStore:GetAsync(Settings.DataStoreTag.."robloxGroupId") or 0
+end)
+if not success then
+    print("[Admin] Failed to read robloxGroupId from DataStore")
+    robloxGroupId = 0
+end
 
 local remoteFunctions = {}
 local remoteEvents = {}
@@ -74,16 +85,13 @@ local function PrintDebuggingInfo()
 		end
 	end
 
-	--print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
-	print("[Admin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
-
-	if Settings.DebugMode then
-		print("UserId | Permissions Level")
-		print("-------------------")
-		for userIdStr, level in pairs(permissions) do
-			print(userIdStr, level)
-		end
-	end
+	print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
+	print("[Admin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )	
+    print("UserId | Permissions Level")
+    print("-------------------")
+    for userIdStr, level in pairs(permissions) do
+        print(userIdStr, level)
+    end
 end
 
 --Gets the permission level of the player from their player object
@@ -181,6 +189,14 @@ game:BindToClose(function()
         print("[Admin] Failed to store scribeOnlyMode")
         print(errormessage)
     end
+
+    success, errormessage = pcall(function()
+        return permissionsDataStore:SetAsync(Settings.DataStoreTag.."robloxGroupId", robloxGroupId)
+    end)
+    if not success then
+        print("[Admin] Failed to store robloxGroupId")
+        print(errormessage)
+    end
 end)
 
 PlayersService.PlayerAdded:Connect(function(player)
@@ -192,13 +208,13 @@ PlayersService.PlayerAdded:Connect(function(player)
     end
 
     -- On a per-user basis we look for settings based on the Roblox group
-	if game.CreatorType == Enum.CreatorType.Group then
+	if robloxGroupId ~= 0 then
         local success, groups = pcall(function()
             return GroupService:GetGroupsAsync(player.UserId)
         end)
         if success then
             for _, group in ipairs(groups) do
-                if group["Id"] == game.CreatorId then
+                if group["Id"] == robloxGroupId then
                     -- The player is a member of the group that owns this experience
                     -- and so we just use their group rank here
                     local playerRank = group["Rank"]
@@ -209,6 +225,10 @@ PlayersService.PlayerAdded:Connect(function(player)
         else
             print("[Admin] Failed to query player's groups")
         end
+    end
+
+    if Settings.DebugMode then
+        PrintDebuggingInfo()
     end
 end)
 
@@ -423,6 +443,47 @@ function BindCommands()
 					}, speaker.Name)
 				end
 			end
+		end
+	})
+
+    BindCommand({
+		name = "setrobloxgroup",
+		perm = Settings.AdminPerm,
+		usage = Settings.Prefix.."setrobloxgroup <groupId>",
+		brief = "Set Roblox group",
+		help = "Set Roblox group. If set, this group's ranks will be imported as permissions to this experience. Set to zero to disable.",
+		examples = {Settings.Prefix.."setrobloxgroup 29199290"},
+		func = function(speaker, args)
+
+			if #args == 0 then
+				SendMessageToClient({
+					Text = "No arguments given.";
+					ChatColor = Color3.new(1, 0, 0)
+				}, speaker.Name)
+				return false
+			end
+
+            if game.CreatorType == Enum.CreatorType.Group then
+                SendMessageToClient({
+                    Text = "Cannot manually set Roblox group for an experience owned by a group.";
+                    ChatColor = Color3.new(1,0,0)
+                }, speaker.Name)
+                return false
+            end
+
+            local groupId = tonumber(args[1])
+
+            if groupId == nil then
+				SendMessageToClient({
+					Text = "The second argument to this command must be an integer";
+					ChatColor = Color3.new(1, 0, 0)
+				}, speaker.Name)
+				return false
+			end
+
+            -- groupId checks out, set the Roblox group and update settings
+            robloxGroupId = groupId
+            LoadSettingsFromGroup(groupId)
 		end
 	})
 
@@ -775,30 +836,45 @@ local function CreateRemotes()
     end
 end
 
--- Binds all commands at once
-function Run(ChatService)
-    -- Look for Roblox group settings on Scribe and Admin rank cutoffs
-    if game.CreatorType == Enum.CreatorType.Group then
-        local success, response = pcall(function()
-            return GroupService:GetGroupInfoAsync(game.CreatorId)
-        end)
-        if success then
-            if response and response.Roles then
-                for _, role in ipairs(response.Roles) do
-                    if role.Name == "Scribe" then
-                        -- Overwrite settings for scribes
-                        Settings.ScribePerm = role.Rank
-                    end 
+local function LoadSettingsFromGroup(groupId)
+    if groupId == 0 then
+        Settings.ScribePerm = 50
+        Settings.AdminPerm = 254
+        return
+    end
 
-                    if role.Name == "Admin" then
-                        -- Overwrite settings for admins
-                        Settings.AdminPerm = role.Rank
-                    end
+    local success, response = pcall(function()
+        return GroupService:GetGroupInfoAsync(groupId)
+    end)
+    if success then
+        if response and response.Roles then
+            for _, role in ipairs(response.Roles) do
+                if role.Name == "Scribe" then
+                    -- Overwrite settings for scribes
+                    Settings.ScribePerm = role.Rank
+                end 
+
+                if role.Name == "Admin" then
+                    -- Overwrite settings for admins
+                    Settings.AdminPerm = role.Rank
                 end
             end
-        else
-            print("[Admin] Failed to get group info")
         end
+    else
+        print("[Admin] Failed to get group info")
+    end
+end
+
+-- Binds all commands at once
+function Run(ChatService)
+    -- If the game is created by a group, set this as the robloxGroupId
+    if game.CreatorType == Enum.CreatorType.Group then
+        robloxGroupId = game.CreatorId
+    end
+
+    -- Look for Roblox group settings on Scribe and Admin rank cutoffs
+    if robloxGroupId ~= 0 then
+        LoadSettingsFromGroup(robloxGroupId)
     end
 
     -- Give admin rights to owners of private servers
