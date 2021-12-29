@@ -1,0 +1,15 @@
+{
+	"name": "metauni-admin",
+	"tree": {
+		"$className": "DataModel",
+
+		"Chat": {
+			"$ignoreUnknownInstances": true,
+			"$className": "Chat",
+			"ChatModules": {
+				"$className": "Folder",
+				"$path": "src/"
+			}
+		}
+	}
+}
