@@ -40,3 +40,6 @@ Drawing on whiteboards can be disabled for guests with the `/boards off` command
 ### Roles
 
 Managing roles/permission levels is done via the `/setadmin`, `/setscribe`, `/setguest`, `/setperm`, `/getperm` commands. Chat `/setperm?` or `/getperm?` for a list of roles/permission levels.
+
+* If the experience is owned by a Roblox group, you cannot manually set the `robloxGroupId` as it is set automatically to the owning group.
+* You can use `/setrobloxgroup N` to set your Roblox group (as usual, find the ID by navigating to your group on the Roblox homepage and extracting it from the URL).
