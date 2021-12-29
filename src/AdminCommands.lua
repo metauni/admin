@@ -1,43 +1,48 @@
+--
+-- Metauni Admin chat system
+--
+
 -- ADAPTED FROM https://devforum.roblox.com/t/making-chat-admin-commands-using-the-chat-service/871157
 
+-- We assume AdminPerm >= ScribePerm
+
 local Settings = {
-	Prefix = "/"; -- Symbol that lets the script know the message is a command
-	DebugMode = false; -- Set to true when making new commands so it's easier to identify errors
+	Prefix = "/", -- Symbol that lets the script know the message is a command
+	DebugMode = false, -- Set to true when making new commands so it's easier to identify errors
 	Admins = {
 		-- Dictionary of user ids and the rank the player with that user id will be receiving (rank must be a number)
 		-- These entries overwrite whatever is saved in the permissions DataStore everytime the server is started (see game:BindToClose)
-		[tostring(game.CreatorId)] = math.huge; -- The creator gets infinity permission level
+		[tostring(game.CreatorId)] = 255;
 		-- Hard code more roles here, which will overwrite any changes when the server restarts
 		-- e.g. To make player with user ID 1234 a permanent admin, add this (make sure the ID is a string)
-		-- ["1234"] = 10;
-        ["2211421151"] = 10;
-	};
-	DefaultPerm = 0;
-	ScribePerm = 5;
-	AdminPerm = 10;
-	BanKickMessage = "You have been banned by an admin.";
-	BanOnJoinMessage = "You are banned."
+		-- ["1234"] = 254;
+	},
+	DefaultPerm = 0,
+	ScribePerm = 50, -- Can be overwritten by Roblox group settings
+	AdminPerm = 254, -- Can be overwritten by Roblox group settings
+	BanKickMessage = "You have been banned by an admin.",
+	BanOnJoinMessage = "You are banned.",
+    DataStoreTag = "v2."
 }
 
--- [[ Services ]] --
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PlayersService = game:GetService("Players")
 local DataStore = game:GetService("DataStoreService")
+local GroupService = game:GetService("GroupService")
 
--- [[ Data Stores]]
 local permissionsDataStore = DataStore:GetDataStore("permissionsDataStore")
-local permissions = permissionsDataStore:GetAsync("permissions") or {}
-local scribeOnlyMode = permissionsDataStore:GetAsync("scribeOnlyMode") or false
+local permissions = permissionsDataStore:GetAsync(Settings.DataStoreTag.."permissions") or {}
+local scribeOnlyMode = permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
 
 local remoteFunctions = {}
 local remoteEvents = {}
 
 function LoadStoredInfo()
 	if scribeOnlyMode then
-		print("Whiteboards deactivated for guests on startup")
+		print("[Admin] Whiteboards deactivated for guests on startup")
 	else
-		print("Whiteboards activated for guests on startup")
+		print("[Admin] Whiteboards activated for guests on startup")
 	end
 
 	for userIdStr, level in pairs(Settings.Admins) do
@@ -57,8 +62,8 @@ function LoadStoredInfo()
 		end
 	end
 
-	print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
-	print(countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
+	--print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
+	print("[Admin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
 
 	if Settings.DebugMode then
 		print("UserId | Permissions Level")
@@ -145,25 +150,43 @@ game:BindToClose(function()
 		end
 	end
 
-	print("Writing "..(countAdmin + countBanned + countGuest).." permission entries to Data Store")
-	print(countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
-	permissionsDataStore:SetAsync("permissions", permissions)
-	permissionsDataStore:SetAsync("scribeOnlyMode", scribeOnlyMode)
+	--print("Writing "..(countAdmin + countBanned + countGuest).." permission entries to Data Store")
+	--print(countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
+	permissionsDataStore:SetAsync(Settings.DataStoreTag.."permissions", permissions)
+	permissionsDataStore:SetAsync(Settings.DataStoreTag.."scribeOnlyMode", scribeOnlyMode)
 end)
 
--- Kicks banned players when they join and re-admins the admins when they join
 PlayersService.PlayerAdded:Connect(function(player)
-	print(player.name.." joined")
+    -- Handle banning
 	if isBanned(player.UserId) then
-		print("Kicked "..player.Name.." because they are banned. UserId: "..player.UserId..", Permission Level: "..GetPermLevel(player.UserId))
+		print("[Admin] Kicked "..player.Name.." because they are banned. UserId: "..player.UserId..", Permission Level: "..GetPermLevel(player.UserId))
 		player:Kick(Settings.BanOnJoinMessage)
 		return
-	else
-		local hardCodedLevel = Settings.Admins[player.UserId]
-		if hardCodedLevel then
-			SetPermLevel(player.UserId, hardCodedLevel)
-		end
-	end
+    end
+
+    -- The Admins dictionary has first precedence
+	local hardCodedLevel = Settings.Admins[player.UserId]
+	if hardCodedLevel then
+        SetPermLevel(player.UserId, hardCodedLevel)
+    elseif game.CreatorType == Enum.CreatorType.Group then
+        -- After that, we look for settings based on the Roblox group
+        local success, groups = pcall(function()
+            return GroupService:GetGroupsAsync(player.UserId)
+        end)
+        if success then
+            for _, group in ipairs(groups) do
+                if group["Id"] == game.CreatorId then
+                    -- The player is a member of the group that owns this experience
+                    -- and so we just use their group rank here
+                    local playerRank = group["Rank"]
+                    SetPermLevel(player.UserId, playerRank)
+                    print("[Admin] Found player ".. player.Name.." in group, assigning rank "..tostring(playerRank))
+                end
+            end
+        else
+            print("[Admin] Failed to query player's groups")
+        end
+    end
 end)
 
 -- ##############################################################
@@ -731,18 +754,41 @@ end
 
 -- Binds all commands at once
 function Run(ChatService)
+    -- Look for Roblox group settings
+    if game.CreatorType == Enum.CreatorType.Group then
+        local success, response = pcall(function()
+            return GroupService:GetGroupInfoAsync(game.CreatorId)
+        end)
+        if success then
+            if response and response.Roles then
+                for _, role in ipairs(response.Roles) do
+                    if role.Name == "Scribe" then
+                        -- Overwrite settings for scribes
+                        Settings.ScribePerm = role.Rank
+                    end 
 
-	spawn(BindCommands) -- Bind all the commands
-
-	LoadStoredInfo()
+                    if role.Name == "Admin" then
+                        -- Overwrite settings for admins
+                        Settings.AdminPerm = role.Rank
+                    end
+                end
+            end
+        else
+            print("[Admin] Failed to get group info")
+        end
+    end
 
     -- Give admin rights to owners of private servers
     if game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0 then
-        Settings.Admins[tostring(game.PrivateServerOwnerId)] = math.huge
+        Settings.Admins[tostring(game.PrivateServerOwnerId)] = Settings.AdminPerm
     end
 
     -- Other code interacts with the permission system via remote functions and events
     CreateRemotes()
+
+    spawn(BindCommands) -- Bind all the commands
+
+	LoadStoredInfo()
 
 	local function ParseCommand(speakerName, message, channelName)
 		local isCommand = message:match("^"..Settings.Prefix)
