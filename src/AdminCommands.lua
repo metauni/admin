@@ -1,10 +1,7 @@
 --
--- Metauni Admin chat system
+-- Metauni Admin Commands
 --
-
 -- ADAPTED FROM https://devforum.roblox.com/t/making-chat-admin-commands-using-the-chat-service/871157
-
--- We assume AdminPerm >= ScribePerm
 
 local Settings = {
 	Prefix = "/", -- Symbol that lets the script know the message is a command
@@ -31,24 +28,39 @@ local PlayersService = game:GetService("Players")
 local DataStore = game:GetService("DataStoreService")
 local GroupService = game:GetService("GroupService")
 
+-- DataStore
 local permissionsDataStore = DataStore:GetDataStore("permissionsDataStore")
-local permissions = permissionsDataStore:GetAsync(Settings.DataStoreTag.."permissions") or {}
-local scribeOnlyMode = permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
+local permissions
+local scribeOnlyMode
+
+local success
+success, permissions = pcall(function()
+    return permissionsDataStore:GetAsync(Settings.DataStoreTag.."permissions") or {}
+end)
+if not success then
+    print("[Admin] Failed to read permissions from DataStore")
+    permissions = {}
+end
+
+success, scribeOnlyMode = pcall(function()
+    return permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
+end)
+if not success then
+    print("[Admin] Failed to read scribeOnlyMode from DataStore")
+    scribeOnlyMode = false
+end
+
+if scribeOnlyMode then
+    print("[Admin] Whiteboards deactivated for guests on startup")
+else
+    print("[Admin] Whiteboards activated for guests on startup")
+end
+
 
 local remoteFunctions = {}
 local remoteEvents = {}
 
-function LoadStoredInfo()
-	if scribeOnlyMode then
-		print("[Admin] Whiteboards deactivated for guests on startup")
-	else
-		print("[Admin] Whiteboards activated for guests on startup")
-	end
-
-	for userIdStr, level in pairs(Settings.Admins) do
-		SetPermLevel(userIdStr, level)
-	end
-
+local function PrintDebuggingInfo()
 	local countAdmin = 0
 	local countGuest = 0
 	local countBanned = 0
@@ -152,8 +164,23 @@ game:BindToClose(function()
 
 	--print("Writing "..(countAdmin + countBanned + countGuest).." permission entries to Data Store")
 	--print(countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
-	permissionsDataStore:SetAsync(Settings.DataStoreTag.."permissions", permissions)
-	permissionsDataStore:SetAsync(Settings.DataStoreTag.."scribeOnlyMode", scribeOnlyMode)
+    local success, errormessage
+
+    success, errormessage = pcall(function()
+        return permissionsDataStore:SetAsync(Settings.DataStoreTag.."permissions", permissions)
+    end)
+    if not success then
+        print("[Admin] Failed to store permissions")
+        print(errormessage)
+    end
+
+	success, errormessage = pcall(function()
+        return permissionsDataStore:SetAsync(Settings.DataStoreTag.."scribeOnlyMode", scribeOnlyMode)
+    end)
+    if not success then
+        print("[Admin] Failed to store scribeOnlyMode")
+        print(errormessage)
+    end
 end)
 
 PlayersService.PlayerAdded:Connect(function(player)
@@ -164,12 +191,8 @@ PlayersService.PlayerAdded:Connect(function(player)
 		return
     end
 
-    -- The Admins dictionary has first precedence
-	local hardCodedLevel = Settings.Admins[player.UserId]
-	if hardCodedLevel then
-        SetPermLevel(player.UserId, hardCodedLevel)
-    elseif game.CreatorType == Enum.CreatorType.Group then
-        -- After that, we look for settings based on the Roblox group
+    -- On a per-user basis we look for settings based on the Roblox group
+	if game.CreatorType == Enum.CreatorType.Group then
         local success, groups = pcall(function()
             return GroupService:GetGroupsAsync(player.UserId)
         end)
@@ -754,7 +777,7 @@ end
 
 -- Binds all commands at once
 function Run(ChatService)
-    -- Look for Roblox group settings
+    -- Look for Roblox group settings on Scribe and Admin rank cutoffs
     if game.CreatorType == Enum.CreatorType.Group then
         local success, response = pcall(function()
             return GroupService:GetGroupInfoAsync(game.CreatorId)
@@ -783,12 +806,16 @@ function Run(ChatService)
         Settings.Admins[tostring(game.PrivateServerOwnerId)] = Settings.AdminPerm
     end
 
+    -- (Potentially) overwrite the permissions loaded from the DataStore
+    -- with the settings in Settings.Admins
+    for userIdStr, level in pairs(Settings.Admins) do
+		SetPermLevel(userIdStr, level)
+	end
+
     -- Other code interacts with the permission system via remote functions and events
     CreateRemotes()
 
     spawn(BindCommands) -- Bind all the commands
-
-	LoadStoredInfo()
 
 	local function ParseCommand(speakerName, message, channelName)
 		local isCommand = message:match("^"..Settings.Prefix)
