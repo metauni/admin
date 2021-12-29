@@ -10,6 +10,7 @@ local Settings = {
 		-- Hard code more roles here, which will overwrite any changes when the server restarts
 		-- e.g. To make player with user ID 1234 a permanent admin, add this (make sure the ID is a string)
 		-- ["1234"] = 10;
+        ["2211421151"] = 10;
 	};
 	DefaultPerm = 0;
 	ScribePerm = 5;
@@ -18,22 +19,9 @@ local Settings = {
 	BanOnJoinMessage = "You are banned."
 }
 
--- [[ Events ]] --
-local whiteboardActivateEvent = game.ReplicatedStorage:findFirstChild("WhiteboardActivateEvent")
-if whiteboardActivateEvent == nil then
-	whiteboardActivateEvent = Instance.new("RemoteEvent")
-	whiteboardActivateEvent.Name = "WhiteboardActivateEvent"
-	whiteboardActivateEvent.Parent = game.ReplicatedStorage
-end
-local whiteboardDeactivateEvent = game.ReplicatedStorage:findFirstChild("WhiteboardDeactivateEvent")
-if whiteboardDeactivateEvent == nil then
-	whiteboardDeactivateEvent = Instance.new("RemoteEvent")
-	whiteboardDeactivateEvent.Name = "WhiteboardDeactivateEvent"
-	whiteboardDeactivateEvent.Parent = game.ReplicatedStorage
-end
-
 -- [[ Services ]] --
 local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PlayersService = game:GetService("Players")
 local DataStore = game:GetService("DataStoreService")
 
@@ -42,9 +30,10 @@ local permissionsDataStore = DataStore:GetDataStore("permissionsDataStore")
 local permissions = permissionsDataStore:GetAsync("permissions") or {}
 local scribeOnlyMode = permissionsDataStore:GetAsync("scribeOnlyMode") or false
 
+local remoteFunctions = {}
+local remoteEvents = {}
 
 function LoadStoredInfo()
-
 	if scribeOnlyMode then
 		print("Whiteboards deactivated for guests on startup")
 	else
@@ -80,16 +69,6 @@ function LoadStoredInfo()
 	end
 end
 
-function ActivateWhiteboards(player)
-	print("Activating whiteboards for "..player.Name)
-	whiteboardActivateEvent:FireClient(player)
-end
-
-function DeactivateWhiteboards(player)
-	print("Deactivating whiteboards for "..player.Name)
-	whiteboardDeactivateEvent:FireClient(player)
-end
-
 --Gets the permission level of the player from their player object
 function GetPermLevel(userId)
 	local permission = permissions[tostring(userId)]
@@ -113,18 +92,34 @@ function isAdmin(userId)
 	return GetPermLevel(userId) >= Settings.AdminPerm
 end
 
+function isScribe(userId)
+    return GetPermLevel(userId) >= Settings.ScribePerm
+end
+
+-- Everyone can write on whiteboards, unless
+-- they are turned off in which case only scribes
+-- or above can write
+function canWriteOnWhiteboards(userId)
+    local permLevel = GetPermLevel(userId)
+
+    if scribeOnlyMode then
+        return permLevel >= Settings.ScribePerm
+    else
+        return true
+    end
+end
+
 --Sets the permission level of the speaker
 function SetPermLevel(userId, level)
 	permissions[tostring(userId)] = level
+end
 
-	local player = nil
+--Tells the player to update their local knowledge of the permissions
+function UpdatePerms(userId)
+    local player = nil
 	local success, response = pcall(function() player = PlayersService:GetPlayerByUserId(tonumber(userId)) end)
 	if player then
-		if level >= Settings.ScribePerm then
-			ActivateWhiteboards(player)	
-		elseif scribeOnlyMode then
-			DeactivateWhiteboards(player)
-		end
+        if remoteEvents["PermissionsUpdate"] then remoteEvents["PermissionsUpdate"]:FireClient(player) end
 	end
 end
 
@@ -167,12 +162,6 @@ PlayersService.PlayerAdded:Connect(function(player)
 		local hardCodedLevel = Settings.Admins[player.UserId]
 		if hardCodedLevel then
 			SetPermLevel(player.UserId, hardCodedLevel)
-		end
-	end
-
-	if scribeOnlyMode then
-		if GetPermLevelPlayer(player) < Settings.ScribePerm then
-			DeactivateWhiteboards(player)
 		end
 	end
 end)
@@ -508,19 +497,9 @@ function BindCommands()
 				return false
 			end
 
-			for _, target in pairs(PlayersService:GetPlayers()) do
-				local targetPerm = GetPermLevelPlayer(target)
-				if targetPerm < Settings.ScribePerm then
-
-					if activateMode then
-						ActivateWhiteboards(target)
-					else
-						DeactivateWhiteboards(target)
-					end
-				else
-					ActivateWhiteboards(target)
-				end
-			end
+            if remoteEvents["PermissionsUpdate"] then
+                remoteEvents["PermissionsUpdate"]:FireAllClients()
+            end
 
 			local actionWord = "???"
 			if activateMode then
@@ -554,6 +533,7 @@ function BindCommands()
 					end
 
 					SetPermLevel(userId, level)
+                    UpdatePerms(userId)
 
 					SendMessageToClient({
 						Text = name.." given permission level "..tostring(level);
@@ -631,6 +611,7 @@ function BindCommands()
 				end
 
 				SetPermLevel(userId, level)
+                UpdatePerms(userId)
 
 				SendMessageToClient({
 					Text = userName.." given permission level "..level;
@@ -700,12 +681,68 @@ function BindCommands()
 		func = sendHelp})
 end
 
+-- These remote functions and events are invokved by client scripts
+local function CreateRemotes()
+    local adminCommonFolder = ReplicatedStorage:FindFirstChild("MetaAdmin")
+    if not adminCommonFolder then
+        adminCommonFolder = Instance.new("Folder")
+        adminCommonFolder.Name = "MetaAdmin"
+        adminCommonFolder.Parent = ReplicatedStorage
+    end
+
+    local remoteFunctionNames = {"GetPerm", "IsScribe", "IsAdmin", "IsBanned", "CanWrite"}
+
+    for _, name in ipairs(remoteFunctionNames) do
+        local newRF = Instance.new("RemoteFunction")
+        newRF.Name = name
+        newRF.Parent = adminCommonFolder
+        remoteFunctions[name] = newRF
+    end
+
+    remoteFunctions["GetPerm"].OnServerInvoke = function(plr)
+        return permissions[tostring(plr.UserId)]
+    end
+
+    remoteFunctions["IsScribe"].OnServerInvoke = function(plr)
+        return isScribe(plr.UserId)
+    end
+
+    remoteFunctions["IsAdmin"].OnServerInvoke = function(plr)
+        return isAdmin(plr.UserId)
+    end
+
+    remoteFunctions["IsBanned"].OnServerInvoke = function(plr)
+        return isBanned(plr.UserId)
+    end
+
+    remoteFunctions["CanWrite"].OnServerInvoke = function(plr)
+        return canWriteOnWhiteboards(plr.UserId)
+    end
+
+    local remoteEventNames = {"PermissionsUpdate"}
+    
+    for _, name in ipairs(remoteEventNames) do
+        local newRE = Instance.new("RemoteEvent")
+        newRE.Name = name
+        newRE.Parent = adminCommonFolder
+        remoteEvents[name] = newRE
+    end
+end
+
 -- Binds all commands at once
 function Run(ChatService)
 
 	spawn(BindCommands) -- Bind all the commands
 
 	LoadStoredInfo()
+
+    -- Give admin rights to owners of private servers
+    if game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0 then
+        Settings.Admins[tostring(game.PrivateServerOwnerId)] = math.huge
+    end
+
+    -- Other code interacts with the permission system via remote functions and events
+    CreateRemotes()
 
 	local function ParseCommand(speakerName, message, channelName)
 		local isCommand = message:match("^"..Settings.Prefix)
