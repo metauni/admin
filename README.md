@@ -43,7 +43,7 @@ Managing roles/permission levels is done via the `/setadmin`, `/setscribe`, `/se
 
 ### Integration with Roblox groups
 
-You can manage permissions via a Roblox group, using `/setrobloxgroup ID` where `ID` is the identification number of your group, obtained from its URL on the Roblox group page. Use `/setrobloxgroup 0` to disable the link to the Roblox group. The Admin Commands will assign to every player in the experience which is also a group member the permission level given by their rank in the group (if they are a member of the group).
+You can manage permissions via a Roblox group, using `/setrobloxgroup ID` where `ID` is the identification number of your group, obtained from its URL on the Roblox group page. Use `/setrobloxgroup 0` to disable the link to the Roblox group. The Admin Commands will assign to every player in the experience which is also a group member the permission level given by their rank in the group.
 
 The Admin Commands also looks for special roles `Scribe` and `Admin` in your Roblox group, and uses the ranks of those groups to manage the cutoffs for scribes and admins in your experience (which are by default `50` and `254` respectively).
 
