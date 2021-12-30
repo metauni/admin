@@ -1,6 +1,6 @@
 # Admin system
 
-This repository contains the metauni administration tools. If you are running your own server, you should familiarise yourself with the [Roblox rules](https://metauni.org/posts/rules/rules) and [Discord Terms of Service](https://discord.com/terms). If you observe users breaking Roblox rules, for example harrassing other users or engaing in offensive behaviour, you should **report them using the Roblox tools** that can be accessed via `Escape`.
+This repository contains the metauni administration tools. If you are running your own server, you should familiarise yourself with the [Roblox rules](https://metauni.org/posts/rules/rules) and [Discord Terms of Service](https://discord.com/terms). If you observe users breaking Roblox rules, for example harrassing other users or engaing in offensive behaviour, you should report them using the Roblox tools that can be accessed via `Escape`.
 
 For less serious matters, you can use the Admin Commands.
 
@@ -12,10 +12,12 @@ We have a ChatModule which extends the functionality of the in-game chat command
 |--|--|--|
 |<0| banned|Instantly kicked when joining your world|
 |0| guest | the default permission level|
-|5| scribe|Can still draw when boards turned off|
-|10| admin|Can execute all commands|
+|50| scribe|Can still draw when boards turned off|
+|254| admin|Can execute all commands|
 
 Each higher role in this hierchary accumulates any abilities of lower (non-negative) roles.
+
+The owner of a private server always has admin privileges. If the creator of an experience is a user, that user will always have admin privileges in any *public* server (not in a private server). If the creator of an experience is a group, the ranks of members of that group will by default determine permissions in any *public* server (not in private servers). For example, in any public metauni server any members of the [metauni Roblox group](https://www.roblox.com/groups/13108882/metauni#!/about) with the Scribe role will have permission level at least `50`. But in a private server only the owner of the server has any nonzero permission level by default.
 
 ### Installation
 
@@ -23,9 +25,7 @@ To install AdminCommands, download a release from this GitHub repository and dra
 
 ### Using commands
 
-Enter your Roblox world to read about and try the commands. When an admin joins, they are reminded they can get a list of commands by chatting `/helpadmin` or command-specific help by adding a `?` after the command, e.g. `/ban?`
-
-The creator of the Roblox world is hardcoded to have the highest permission level (infinity... duh). The usage of the commands themselves is all documented within Roblox chat itself, so here we will just give an overview.
+Enter your Roblox world to read about and try the commands. When an admin joins, they are reminded they can get a list of commands by chatting `/helpadmin` or command-specific help by adding a `?` after the command, e.g. `/ban?`. The usage of the commands themselves is all documented within Roblox chat itself, so here we will just give an overview.
 
 ### Banning
 
@@ -33,7 +33,7 @@ Ban management is achieved using the `/ban`, `/unban`, `/kick`, `/banstatus` com
 
 ### Whiteboard activation
 
-We encourage administrators to be **particularly careful about the use of whiteboards** since some usages of these fall outside the Roblox rules (for example, the whiteboards should not be used as an alternative chat system, or used to post Discord links, URLs or offensive images, or in general to bypass the Roblox filtration system). You can use the metauni admin tools to turn whiteboards on or off, so that they are only enabled at particular times under the supervision of administrators or their delegates.
+We encourage administrators to be particularly careful about the use of whiteboards since some usages of these fall outside the Roblox rules (for example, the whiteboards should not be used as an alternative chat system, or used to post Discord links, URLs or offensive images, or in general to bypass the Roblox filtration system). You can use the metauni admin tools to turn whiteboards on or off, so that they are only enabled at particular times under the supervision of administrators or their delegates.
 
 Drawing on whiteboards can be disabled for guests with the `/boards off` command and reactivated with `/boards on`. This setting is preserved between server restarts and updates, so you may choose to leave the boards disabled when you're not around. This setting has no effect on *scribes* and *admins*, so you can assign the *scribe* role to, for example, guest speakers, or anyone you trust without giving them the admin role.
 
@@ -41,8 +41,19 @@ Drawing on whiteboards can be disabled for guests with the `/boards off` command
 
 Managing roles/permission levels is done via the `/setadmin`, `/setscribe`, `/setguest`, `/setperm`, `/getperm` commands. Chat `/setperm?` or `/getperm?` for a list of roles/permission levels.
 
-* If the experience is owned by a Roblox group, you cannot manually set the `robloxGroupId` as it is set automatically to the owning group.
-* You can use `/setrobloxgroup N` to set your Roblox group (as usual, find the ID by navigating to your group on the Roblox homepage and extracting it from the URL).
+### Integration with Roblox groups
+
+You can manage permissions via a Roblox group, using `/setrobloxgroup ID` where `ID` is the identification number of your group, obtained from its URL on the Roblox group page. Use `/setrobloxgroup 0` to disable the link to the Roblox group. The Admin Commands will assign to every player in the experience which is also a group member the permission level given by their rank in the group (if they are a member of the group).
+
+The Admin Commands also looks for special roles `Scribe` and `Admin` in your Roblox group, and uses the ranks of those groups to manage the cutoffs for scribes and admins in your experience (which are by default `50` and `254` respectively).
+
+If the Roblox experience was created by a group, then by default the Admin Commands will import permissions from that group, but you can set a different group using `setrobloxgroup`.
+
+Some notes:
+
+* Note that if you disable the link, permissions from the Roblox group will have already been written into the DataStore, so e.g. any admins in your Roblox group will have admin privileges in your experience *even after you turn off the link* with `/setrobloxgroup 0`. You will have to manually change the permissions to the desired settings.
+
+* If you change the Roblox group permissions the settings in a live server will not immediately change, but you can force them to reload by running `/setrobloxgroup ID` again.
 
 ## Generating a Release
 
