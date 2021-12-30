@@ -43,3 +43,14 @@ Managing roles/permission levels is done via the `/setadmin`, `/setscribe`, `/se
 
 * If the experience is owned by a Roblox group, you cannot manually set the `robloxGroupId` as it is set automatically to the owning group.
 * You can use `/setrobloxgroup N` to set your Roblox group (as usual, find the ID by navigating to your group on the Roblox homepage and extracting it from the URL).
+
+## Generating a Release
+
+The `metaadmin.rbxmx` file is generated like this
+```bash
+rojo build --output "build.rbxlx"
+remodel run admin_packager.lua
+```
+
+The first command builds a place file according to `default.project.json`.
+The second command uses [remodel](https://github.com/rojo-rbx/remodel) to extract the `ChatModules` folder as an `rbxmx` file.

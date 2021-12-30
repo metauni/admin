@@ -6,14 +6,6 @@
 local Settings = {
 	Prefix = "/", -- Symbol that lets the script know the message is a command
 	DebugMode = false, -- Set to true when making new commands so it's easier to identify errors
-	Admins = {
-		-- Dictionary of user ids and the rank the player with that user id will be receiving (rank must be a number)
-		-- These entries overwrite whatever is saved in the permissions DataStore everytime the server is started (see game:BindToClose)
-		[tostring(game.CreatorId)] = 255;
-		-- Hard code more roles here, which will overwrite any changes when the server restarts
-		-- e.g. To make player with user ID 1234 a permanent admin, add this (make sure the ID is a string)
-		-- ["1234"] = 254;
-	},
 	DefaultPerm = 0,
 	ScribePerm = 50, -- Can be overwritten by Roblox group settings
 	AdminPerm = 254, -- Can be overwritten by Roblox group settings
@@ -156,6 +148,72 @@ function SetDefault(userId)
 	SetPermLevel(userId, Settings.DefaultPerm)
 end
 
+local function LoadPlayerPermissionsFromGroup(player, groupId)
+    if not groupId or not player or groupId == 0 then return end
+
+    local success, groups = pcall(function()
+        return GroupService:GetGroupsAsync(player.UserId)
+    end)
+    if success then
+        for _, group in ipairs(groups) do
+            if group["Id"] == groupId then
+                -- The player is a member of the group that owns this experience
+                -- and so we just use their group rank here
+                local playerRank = group["Rank"]
+                SetPermLevel(player.UserId, playerRank)
+                print("[Admin] Found player ".. player.Name.." in group, assigning rank "..tostring(playerRank))
+            end
+        end
+    else
+        print("[Admin] Failed to query player's groups")
+    end
+end
+
+local function LoadPermissionsFromGroup(groupId)
+    if not robloxGroupId or robloxGroupId == 0 then return end
+    
+    for _, player in pairs(PlayersService:GetPlayers()) do
+        LoadPlayerPermissionsFromGroup(player, robloxGroupId)
+    end
+end
+
+local function LoadSettingsFromGroup(groupId)
+    if groupId == 0 then
+        Settings.ScribePerm = 50
+        Settings.AdminPerm = 254
+        return
+    end
+
+    local success, response = pcall(function()
+        return GroupService:GetGroupInfoAsync(groupId)
+    end)
+    if success then
+        if response and response.Roles then
+            for _, role in ipairs(response.Roles) do
+                if role.Name == "Scribe" then
+                    -- Overwrite settings for scribes
+                    Settings.ScribePerm = role.Rank
+                end 
+
+                if role.Name == "Admin" then
+                    -- Overwrite settings for admins
+                    Settings.AdminPerm = role.Rank
+                end
+            end
+        end
+    else
+        print("[Admin] Failed to get group info")
+    end
+end
+
+local function isPrivateServer()
+    if game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0 then
+        return true
+    else
+        return false
+    end
+end
+
 game:BindToClose(function()
 	local countAdmin = 0
 	local countGuest = 0
@@ -207,24 +265,9 @@ PlayersService.PlayerAdded:Connect(function(player)
 		return
     end
 
-    -- On a per-user basis we look for settings based on the Roblox group
-	if robloxGroupId ~= 0 then
-        local success, groups = pcall(function()
-            return GroupService:GetGroupsAsync(player.UserId)
-        end)
-        if success then
-            for _, group in ipairs(groups) do
-                if group["Id"] == robloxGroupId then
-                    -- The player is a member of the group that owns this experience
-                    -- and so we just use their group rank here
-                    local playerRank = group["Rank"]
-                    SetPermLevel(player.UserId, playerRank)
-                    print("[Admin] Found player ".. player.Name.." in group, assigning rank "..tostring(playerRank))
-                end
-            end
-        else
-            print("[Admin] Failed to query player's groups")
-        end
+    -- If a group is set, load permissions for this user
+    if robloxGroupId ~=0 then
+        LoadPlayerPermissionsFromGroup(player, robloxGroupId)
     end
 
     if Settings.DebugMode then
@@ -463,14 +506,6 @@ function BindCommands()
 				return false
 			end
 
-            if game.CreatorType == Enum.CreatorType.Group then
-                SendMessageToClient({
-                    Text = "Cannot manually set Roblox group for an experience owned by a group.";
-                    ChatColor = Color3.new(1,0,0)
-                }, speaker.Name)
-                return false
-            end
-
             local groupId = tonumber(args[1])
 
             if groupId == nil then
@@ -484,6 +519,12 @@ function BindCommands()
             -- groupId checks out, set the Roblox group and update settings
             robloxGroupId = groupId
             LoadSettingsFromGroup(groupId)
+            LoadPermissionsFromGroup(groupId)
+
+            SendMessageToClient({
+                Text = "Roblox group set to "..groupId..".";
+                ChatColor = Color3.new(0, 1, 0)
+            }, speaker.Name)
 		end
 	})
 
@@ -582,7 +623,7 @@ function BindCommands()
 
 	BindCommand({
 		name = "boards",
-		perm = Settings.ScribePerm,
+		perm = Settings.AdminPerm,
 		usage = Settings.Prefix.."boards {on|off}",
 		brief = "Turn the whiteboards on/off for guests (anyone below scribe level)",
 		help = "'"..Settings.Prefix.."boards off' deactivates drawing on whiteboards for guests, and anyone with permission level below 'scribe'.\n'"..Settings.Prefix.."boards on' allows anyone to draw on whiteboards",
@@ -632,13 +673,6 @@ function BindCommands()
 				local userId = GetUserId(name)
 
 				if userId then
-					if Settings.Admins[userId] then
-						SendMessageToClient({
-							Text = "This player's permission level is hardcoded to the value "..tostring(Settings.Admins[userId])..". This change will be overwritten when the server restarts.";
-							ChatColor = Color3.new(1, 0, 0)
-						}, speaker.Name)
-					end
-
 					SetPermLevel(userId, level)
                     UpdatePerms(userId)
 
@@ -710,13 +744,6 @@ function BindCommands()
 			end
 
 			if userId then
-				if Settings.Admins[userId] then
-					SendMessageToClient({
-						Text = "This player's permission level is hardcoded to the value "..Settings.Admins[userId]..". This change will be overwritten when the server restarts.";
-						ChatColor = Color3.new(1, 0, 0)
-					}, speaker.Name)
-				end
-
 				SetPermLevel(userId, level)
                 UpdatePerms(userId)
 
@@ -836,57 +863,49 @@ local function CreateRemotes()
     end
 end
 
-local function LoadSettingsFromGroup(groupId)
-    if groupId == 0 then
-        Settings.ScribePerm = 50
-        Settings.AdminPerm = 254
-        return
-    end
-
-    local success, response = pcall(function()
-        return GroupService:GetGroupInfoAsync(groupId)
-    end)
-    if success then
-        if response and response.Roles then
-            for _, role in ipairs(response.Roles) do
-                if role.Name == "Scribe" then
-                    -- Overwrite settings for scribes
-                    Settings.ScribePerm = role.Rank
-                end 
-
-                if role.Name == "Admin" then
-                    -- Overwrite settings for admins
-                    Settings.AdminPerm = role.Rank
-                end
-            end
-        end
-    else
-        print("[Admin] Failed to get group info")
-    end
-end
-
 -- Binds all commands at once
 function Run(ChatService)
-    -- If the game is created by a group, set this as the robloxGroupId
-    if game.CreatorType == Enum.CreatorType.Group then
-        robloxGroupId = game.CreatorId
+    -- The CREATOR of an experience is one who published it to Roblox. This can be an individual
+    -- user or a group. The OWNER of an experience is the creator in the case of public servers,
+    -- but for private servers it is the person who made the private server.
+    --
+    -- In the case of private servers we do not give the creator (or those in the group, if the
+    -- creator is a group) special permissions in the server, as the owner of the private server
+    -- does not expect this and may not be able to know what permissions have been set in that group.
+    
+    -- For a private server, the robloxGroupId is 0 by default (ununsed) and may be
+    -- set by the owner to whatever they like
+
+    -- For a public server, the robloxGroupId is 0 by default (unused), is automatically
+    -- set to the group if the server is created by a group, and may be set by admins
+    -- to whatever they like
+
+    -- Note that by the time this runs, permissions, scribeOnlyMode and robloxGroupId
+    -- have been read from the DataStore, so anything we do not now is overwriting
+    -- those stored settings (and will be written on server shutdown to the DataStore)
+
+    -- Give admin rights to owners of private servers and the creator of
+    -- public servers if they are a user
+    if isPrivateServer() then
+        print("[Admin] Giving private server owner "..tostring(game.PrivateServerOwnerId).." admin")
+        SetPermLevel(game.PrivateServerOwnerId, 255)
+    elseif game.CreatorType == Enum.CreatorType.User then
+        print("[Admin] Giving game creator "..tostring(game.CreatorId).." admin")
+        SetPermLevel(game.CreatorId, 255)
+    end
+    
+    if not isPrivateServer() and robloxGroupId == 0 then
+        -- If the game is created by a group, set this as the robloxGroupId
+        if game.CreatorType == Enum.CreatorType.Group then
+            robloxGroupId = game.CreatorId
+        end
     end
 
     -- Look for Roblox group settings on Scribe and Admin rank cutoffs
     if robloxGroupId ~= 0 then
+        print("[Admin] Loading settings from group "..tostring(robloxGroupId))
         LoadSettingsFromGroup(robloxGroupId)
     end
-
-    -- Give admin rights to owners of private servers
-    if game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0 then
-        Settings.Admins[tostring(game.PrivateServerOwnerId)] = Settings.AdminPerm
-    end
-
-    -- (Potentially) overwrite the permissions loaded from the DataStore
-    -- with the settings in Settings.Admins
-    for userIdStr, level in pairs(Settings.Admins) do
-		SetPermLevel(userIdStr, level)
-	end
 
     -- Other code interacts with the permission system via remote functions and events
     CreateRemotes()
