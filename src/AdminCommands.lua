@@ -450,6 +450,52 @@ function BindCommands()
 			end
 		})
 
+	BindCommand(
+		{	name = "warn",
+			usage = Settings.Prefix.."warn <name> [reason]",
+			brief = "Warn a player, with an optional message",
+			help = "Warn a player, with an optional message. This will move them to the spawn location and show them a warning message.",
+			examples = {Settings.Prefix.."warn newton be less disruptive"},
+			perm = Settings.AdminPerm,
+			func = function(speaker, args)
+				local commandTargets = GetTarget(speaker, args[1])
+
+				if #commandTargets == 0 then
+					-- No target was specified so we can't do anything
+					SendMessageToClient({
+						Text = "No targets specified";
+						ChatColor = Color3.new(1, 0, 0)
+					}, speaker.Name)
+					return false
+				end
+
+				local kick_message = table.concat(args, " ")
+				kick_message = kick_message:sub(#args[1]+2)
+
+				for _, target in pairs(commandTargets) do
+					-- Loop through targets table
+					local targetPerm = GetPermLevelPlayer(target)
+					local speakerPerm = GetPermLevelPlayer(speaker)
+					if targetPerm < speakerPerm or speaker == target then
+						if remoteEvents["WarnPlayer"] then
+							remoteEvents["WarnPlayer"]:FireClient(target)
+						end
+
+						SendMessageToClient({
+							Text = "Warned "..target.Name;
+							ChatColor = Color3.new(0, 1, 0)
+						}, speaker.Name)
+					else
+						-- People of lower ranks can't use it on higher ranks or people of the same rank
+						SendMessageToClient({
+							Text = "You cannot use this command on "..target.Name..". They outrank you.";
+							ChatColor = Color3.new(1, 0, 0)
+						}, speaker.Name)
+					end
+				end
+			end
+		})
+
 	BindCommand({
 		name = "banstatus",
 		perm = Settings.AdminPerm,
@@ -853,7 +899,7 @@ local function CreateRemotes()
         return canWriteOnWhiteboards(plr.UserId)
     end
 
-    local remoteEventNames = {"PermissionsUpdate"}
+    local remoteEventNames = {"PermissionsUpdate", "WarnPlayer"}
     
     for _, name in ipairs(remoteEventNames) do
         local newRE = Instance.new("RemoteEvent")
