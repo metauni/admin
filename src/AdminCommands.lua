@@ -20,11 +20,47 @@ local PlayersService = game:GetService("Players")
 local DataStore = game:GetService("DataStoreService")
 local GroupService = game:GetService("GroupService")
 
--- DataStore
-local permissionsDataStore = DataStore:GetDataStore("permissionsDataStore")
-local permissions
-local scribeOnlyMode -- default false
-local robloxGroupId -- 0 means it is not set
+local permissions = {}
+local scribeOnlyMode = false
+local robloxGroupId = 0
+
+local remoteFunctions = {}
+local remoteEvents = {}
+
+local function isPrivateServer()
+	return (game.PrivateServerId ~= "")
+end
+
+local function isPocket()
+	return (game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0)
+end
+
+--
+-- DataStores
+-- 
+
+local dataStoreKey
+
+if not isPrivateServer() then
+	dataStoreKey = "permissionsDataStore"
+else
+	if not isPocket() then
+		print("[MetaAdmin] Loading permissions for private server")
+		dataStoreKey = "metadmin." .. game.PrivateServerOwnerId
+	else
+		-- This is used for interop with metaboard
+		local idValue = workspace:WaitForChild("PrivateServerKey", 20)
+		if idValue then
+			print("[MetaAdmin] Loading permissions for pocket")
+			dataStoreKey = "metadmin." .. idValue.Value
+		else
+			print("[MetaAdmin] In a pocket but could not find PrivateServerKey, disabling admin commands.")
+			return
+		end
+	end
+end
+
+local permissionsDataStore = DataStore:GetDataStore(dataStoreKey)
 
 -- Get permissions database
 local success
@@ -32,7 +68,7 @@ success, permissions = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."permissions") or {}
 end)
 if not success then
-    print("[Admin] Failed to read permissions from DataStore")
+    print("[MetaAdmin] Failed to read permissions from DataStore")
     permissions = {}
 end
 
@@ -41,14 +77,14 @@ success, scribeOnlyMode = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
 end)
 if not success then
-    print("[Admin] Failed to read scribeOnlyMode from DataStore")
+    print("[MetaAdmin] Failed to read scribeOnlyMode from DataStore")
     scribeOnlyMode = false
 end
 
 if scribeOnlyMode then
-    print("[Admin] Whiteboards deactivated for guests on startup")
+    print("[MetaAdmin] Whiteboards deactivated for guests on startup")
 else
-    print("[Admin] Whiteboards activated for guests on startup")
+    print("[MetaAdmin] Whiteboards activated for guests on startup")
 end
 
 -- Get robloxGroupId
@@ -56,12 +92,9 @@ success, robloxGroupId = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."robloxGroupId") or 0
 end)
 if not success then
-    print("[Admin] Failed to read robloxGroupId from DataStore")
+    print("[MetaAdmin] Failed to read robloxGroupId from DataStore")
     robloxGroupId = 0
 end
-
-local remoteFunctions = {}
-local remoteEvents = {}
 
 local function PrintDebuggingInfo()
 	local countAdmin = 0
@@ -78,7 +111,7 @@ local function PrintDebuggingInfo()
 	end
 
 	print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
-	print("[Admin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )	
+	print("[MetaAdmin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )	
     print("UserId | Permissions Level")
     print("-------------------")
     for userIdStr, level in pairs(permissions) do
@@ -101,7 +134,7 @@ function GetPermLevelPlayer(player)
 	return GetPermLevel(player.UserId)
 end
 
-function isBanned(userId) 
+function isBanned(userId)
 	return GetPermLevel(userId) < Settings.DefaultPerm
 end
 
@@ -161,11 +194,11 @@ local function LoadPlayerPermissionsFromGroup(player, groupId)
                 -- and so we just use their group rank here
                 local playerRank = group["Rank"]
                 SetPermLevel(player.UserId, playerRank)
-                print("[Admin] Found player ".. player.Name.." in group, assigning rank "..tostring(playerRank))
+                print("[MetaAdmin] Found player ".. player.Name.." in group, assigning rank "..tostring(playerRank))
             end
         end
     else
-        print("[Admin] Failed to query player's groups")
+        print("[MetaAdmin] Failed to query player's groups")
     end
 end
 
@@ -202,15 +235,7 @@ local function LoadSettingsFromGroup(groupId)
             end
         end
     else
-        print("[Admin] Failed to get group info")
-    end
-end
-
-local function isPrivateServer()
-    if game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0 then
-        return true
-    else
-        return false
+        print("[MetaAdmin] Failed to get group info")
     end
 end
 
@@ -236,7 +261,7 @@ game:BindToClose(function()
         return permissionsDataStore:SetAsync(Settings.DataStoreTag.."permissions", permissions)
     end)
     if not success then
-        print("[Admin] Failed to store permissions")
+        print("[MetaAdmin] Failed to store permissions")
         print(errormessage)
     end
 
@@ -244,7 +269,7 @@ game:BindToClose(function()
         return permissionsDataStore:SetAsync(Settings.DataStoreTag.."scribeOnlyMode", scribeOnlyMode)
     end)
     if not success then
-        print("[Admin] Failed to store scribeOnlyMode")
+        print("[MetaAdmin] Failed to store scribeOnlyMode")
         print(errormessage)
     end
 
@@ -252,7 +277,7 @@ game:BindToClose(function()
         return permissionsDataStore:SetAsync(Settings.DataStoreTag.."robloxGroupId", robloxGroupId)
     end)
     if not success then
-        print("[Admin] Failed to store robloxGroupId")
+        print("[MetaAdmin] Failed to store robloxGroupId")
         print(errormessage)
     end
 end)
@@ -260,7 +285,7 @@ end)
 PlayersService.PlayerAdded:Connect(function(player)
     -- Handle banning
 	if isBanned(player.UserId) then
-		print("[Admin] Kicked "..player.Name.." because they are banned. UserId: "..player.UserId..", Permission Level: "..GetPermLevel(player.UserId))
+		print("[MetaAdmin] Kicked "..player.Name.." because they are banned. UserId: "..player.UserId..", Permission Level: "..GetPermLevel(player.UserId))
 		player:Kick(Settings.BanOnJoinMessage)
 		return
     end
@@ -933,10 +958,22 @@ function Run(ChatService)
     -- Give admin rights to owners of private servers and the creator of
     -- public servers if they are a user
     if isPrivateServer() then
-        print("[Admin] Giving private server owner "..tostring(game.PrivateServerOwnerId).." admin")
-        SetPermLevel(game.PrivateServerOwnerId, 255)
+		if not isPocket() then
+			print("[MetaAdmin] Giving private server owner "..tostring(game.PrivateServerOwnerId).." admin")
+			SetPermLevel(game.PrivateServerOwnerId, 255)
+		else
+			-- Try to find the creator in the pocket
+			local creatorValue = workspace:WaitForChild("PocketCreatorId", 20)
+			if not creatorValue then
+				print("[MetaAdmin] Failed to find PocketCreatorId")
+			else
+				local creatorId = creatorValue.Value
+				print("[MetaAdmin] Giving pocket owner " .. creatorId .. " admin")
+				SetPermLevel(creatorId, 255)
+			end
+		end
     elseif game.CreatorType == Enum.CreatorType.User then
-        print("[Admin] Giving game creator "..tostring(game.CreatorId).." admin")
+        print("[MetaAdmin] Giving game creator "..tostring(game.CreatorId).." admin")
         SetPermLevel(game.CreatorId, 255)
     end
     
@@ -949,12 +986,12 @@ function Run(ChatService)
 
     -- Look for Roblox group settings on Scribe and Admin rank cutoffs
     if robloxGroupId ~= 0 then
-        print("[Admin] Loading settings from group "..tostring(robloxGroupId))
+        print("[MetaAdmin] Loading settings from group "..tostring(robloxGroupId))
         LoadSettingsFromGroup(robloxGroupId)
     end
 
-    -- Other code interacts with the permission system via remote functions and events
-    CreateRemotes()
+	-- Other code interacts with the permission system via remote functions and events
+	CreateRemotes()
 
     spawn(BindCommands) -- Bind all the commands
 
