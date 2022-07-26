@@ -1,5 +1,5 @@
 {
-	"name": "metauni-admin",
+	"name": "metaadmin",
 	"tree": {
 		"$className": "DataModel",
 
@@ -8,7 +8,7 @@
 			"$className": "Chat",
 			"ChatModules": {
 				"$className": "Folder",
-				"$path": "src/"
+				"$path": "src/chat"
 			}
 		}
 	}
