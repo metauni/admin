@@ -1,7 +1,0 @@
-{
-    "Name": "InsertDefaultModules",
-    "ClassName": "BoolValue",
-    "Properties": {
-      "Value": true
-    }
-  }
