@@ -13,7 +13,7 @@ local Settings = {
 	BanKickMessage = "You have been banned by an admin.",
 	BanOnJoinMessage = "You are banned.",
     DataStoreTag = "v2.",
-	Version = "v0.2.0"
+	Version = "v0.2.1"
 }
 
 local permissions = {}
@@ -45,12 +45,12 @@ else
 		dataStoreKey = "metadmin." .. game.PrivateServerOwnerId
 	else
 		-- This is used for interop with metaboard
-		local idValue = workspace:WaitForChild("PrivateServerKey", 20)
+		local idValue = workspace:WaitForChild("PocketId", 20)
 		if idValue then
 			print("[MetaAdmin] Loading permissions for pocket")
 			dataStoreKey = "metadmin." .. idValue.Value
 		else
-			print("[MetaAdmin] In a pocket but could not find PrivateServerKey, disabling admin commands.")
+			print("[MetaAdmin] In a pocket but could not find PocketId, disabling admin commands.")
 			return
 		end
 	end
