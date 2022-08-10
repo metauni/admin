@@ -40,19 +40,28 @@ local dataStoreKey
 if not isPrivateServer() then
 	dataStoreKey = "permissionsDataStore"
 else
-	if not isPocket() then
-		print("[MetaAdmin] Loading permissions for private server")
-		dataStoreKey = "metadmin." .. game.PrivateServerOwnerId
-	else
-		-- This is used for interop with metaboard
-		local idValue = workspace:WaitForChild("PocketId", 20)
-		if idValue then
+
+	local metaPortal = ServerScriptService:FindFirstChild("metaportal")
+	if metaPortal and isPocket() then
+		
+		if metaPortal:GetAttribute("PocketId") == nil then
+			metaPortal:GetAttributeChangedSignal("PocketId"):Wait()
+		end
+
+		local pocketId = metaPortal:GetAttribute("PocketId")
+		
+		if pocketId then
 			print("[MetaAdmin] Loading permissions for pocket")
-			dataStoreKey = "metadmin." .. idValue.Value
+			dataStoreKey = "metadmin." .. pocketId
 		else
 			print("[MetaAdmin] In a pocket but could not find PocketId, disabling admin commands.")
 			return
 		end
+
+	else
+
+		print("[MetaAdmin] Loading permissions for private server")
+		dataStoreKey = "metadmin." .. game.PrivateServerOwnerId
 	end
 end
 
@@ -1027,6 +1036,9 @@ function Run(ChatService)
 	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
+
+	-- Metaboard waits for this before opening up to clients
+	script:SetAttribute("CanWritePermissionsSet", true)
 
     spawn(BindCommands) -- Bind all the commands
 
