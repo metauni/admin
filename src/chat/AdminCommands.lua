@@ -13,7 +13,7 @@ local Settings = {
 	BanKickMessage = "You have been banned by an admin.",
 	BanOnJoinMessage = "You are banned.",
     DataStoreTag = "v2.",
-	Version = "v0.2.1"
+	Version = "v0.2.2"
 }
 
 local permissions = {}
