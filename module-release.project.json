@@ -1,0 +1,10 @@
+{
+	"name": "AdminCommands",
+	"tree": {
+		"$path": "src/chat/AdminCommands.lua",
+
+		"version": {
+			"$path": "./version.txt"
+		}
+	}
+}

@@ -2,6 +2,10 @@
 	"name": "ChatModules",
 	"tree": {
 		"$className": "Folder",
-		"$path": "src/chat"
+		"$path": "src/chat",
+
+		"version": {
+			"$path": "./version.txt"
+		}
 	}
 }

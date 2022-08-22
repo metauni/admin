@@ -13,7 +13,6 @@ local Settings = {
 	BanKickMessage = "You have been banned by an admin.",
 	BanOnJoinMessage = "You are banned.",
     DataStoreTag = "v2.",
-	Version = "v0.2.2"
 }
 
 local permissions = {}
@@ -33,7 +32,7 @@ end
 
 --
 -- DataStores
--- 
+--
 
 local dataStoreKey
 
@@ -43,13 +42,13 @@ else
 
 	local metaPortal = ServerScriptService:FindFirstChild("metaportal")
 	if metaPortal and isPocket() then
-		
+
 		if metaPortal:GetAttribute("PocketId") == nil then
 			metaPortal:GetAttributeChangedSignal("PocketId"):Wait()
 		end
 
 		local pocketId = metaPortal:GetAttribute("PocketId")
-		
+
 		if pocketId then
 			print("[MetaAdmin] Loading permissions for pocket")
 			dataStoreKey = "metadmin." .. pocketId
@@ -117,7 +116,7 @@ local function PrintDebuggingInfo()
 	end
 
 	print("Loaded permissions table with "..(countAdmin + countBanned + countGuest).." entries.")
-	print("[MetaAdmin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )	
+	print("[MetaAdmin] "..countAdmin.." admins, "..countBanned.." banned, and "..countGuest.." others." )
     print("UserId | Permissions Level")
     print("-------------------")
     for userIdStr, level in pairs(permissions) do
@@ -211,7 +210,7 @@ end
 
 local function LoadPermissionsFromGroup(groupId)
     if not robloxGroupId or robloxGroupId == 0 then return end
-    
+
     for _, player in pairs(Players:GetPlayers()) do
         LoadPlayerPermissionsFromGroup(player, robloxGroupId)
     end
@@ -233,7 +232,7 @@ local function LoadSettingsFromGroup(groupId)
                 if role.Name == "Scribe" then
                     -- Overwrite settings for scribes
                     Settings.ScribePerm = role.Rank
-                end 
+                end
 
                 if role.Name == "Admin" then
                     -- Overwrite settings for admins
@@ -401,7 +400,7 @@ local function getHelpMessage()
 	local message = "Admin Commands:\n--------------"
 	for commandName, data in pairs(commands) do
 		if data.usage then
-			message = message.."\n"..data.usage	
+			message = message.."\n"..data.usage
 			if data.brief then
 				message = message.."\n  "..data.brief
 			end
@@ -640,7 +639,7 @@ function BindCommands()
 							ChatColor = Color3.new(1, 0, 0)
 						}, speaker.Name)
 					else
-						SetBanned(userId)		
+						SetBanned(userId)
 						local player = Players:GetPlayerByUserId(userId)
 						if player then
 							player:Kick(Settings.BanKickMessage)
@@ -791,7 +790,7 @@ function BindCommands()
 		brief = "Set the permission level of 1 or more players to scribe",
 		help = "Set the permission level of 1 or more players to scribe. This will be overwritten on restart if their permission level is hardcoded.",
 		examples = {Settings.Prefix.."setscribe euler", Settings.Prefix.."setscribe leibniz gauss"},
-		func = setLevel(Settings.ScribePerm)})		
+		func = setLevel(Settings.ScribePerm)})
 	BindCommand({
 		name = "setscribeall",
 		perm = Settings.AdminPerm,
@@ -809,8 +808,8 @@ function BindCommands()
 				SetPermLevel(plr.UserId, Settings.ScribePerm)
                 UpdatePerms(plr.UserId)
 			end
-		end	
-	})	
+		end
+	})
 	BindCommand({
 		name = "setguest",
 		perm = Settings.AdminPerm,
@@ -834,11 +833,11 @@ function BindCommands()
 				}, speaker.Name)
 				return false
 			end
-			
+
 			local userName = args[1]
 			local userId = GetUserId(userName)
 			local level = tonumber(args[2])
-			
+
 			if level == nil then
 				SendMessageToClient({
 					Text = "The second argument to this command must be an integer";
@@ -872,7 +871,7 @@ function BindCommands()
 		help = "Get a player's permission level.\nKey Permission Levels:\n<0 banned\n0 guest/default\n5 scribe\n10 admin",
 		examples = {Settings.Prefix.."setperm gauss", Settings.Prefix.."setperm euler leibniz"},
 		func = function(speaker, args)
-			
+
 			if #args == 0 then
 				SendMessageToClient({
 					Text = "No arguments given";
@@ -880,11 +879,11 @@ function BindCommands()
 				}, speaker.Name)
 				return false
 			end
-			
+
 			for _, name in ipairs(args) do
-				
+
 				local userId = GetUserId(name)
-				
+
 				if userId then
 
 					local level = GetPermLevel(userId)
@@ -958,7 +957,7 @@ local function CreateRemotes()
     end
 
     local remoteEventNames = {"PermissionsUpdate", "WarnPlayer"}
-    
+
     for _, name in ipairs(remoteEventNames) do
         local newRE = Instance.new("RemoteEvent")
         newRE.Name = name
@@ -976,7 +975,7 @@ function Run(ChatService)
     -- In the case of private servers we do not give the creator (or those in the group, if the
     -- creator is a group) special permissions in the server, as the owner of the private server
     -- does not expect this and may not be able to know what permissions have been set in that group.
-    
+
     -- For a private server, the robloxGroupId is 0 by default (ununsed) and may be
     -- set by the owner to whatever they like
 
@@ -1009,7 +1008,7 @@ function Run(ChatService)
         print("[MetaAdmin] Giving game creator "..tostring(game.CreatorId).." admin")
         SetPermLevel(game.CreatorId, 255)
     end
-    
+
     if not isPrivateServer() and robloxGroupId == 0 then
         -- If the game is created by a group, set this as the robloxGroupId
         if game.CreatorType == Enum.CreatorType.Group then
@@ -1053,7 +1052,7 @@ function Run(ChatService)
 			local command = nil -- The command the player is trying to execute (we haven't found that yet)
 			local args = {} -- Table of arguments
 			-- Arguments are words after the command
-			-- So let's say the command was 
+			-- So let's say the command was
 			-- ;fly jerry
 			-- jerry would be the 1st argument
 			for word in messageWithoutPrefix:gmatch("[%w%p]+") do
@@ -1162,7 +1161,10 @@ function Run(ChatService)
 			end
 		end) end)
 
-	print("[MetaAdmin] "..Settings.Version.." initialised")
+		local versionValue = script:FindFirstChild("version")
+		local ver = versionValue and versionValue.Value or ""
+
+	print("[MetaAdmin] "..ver.." initialised")
 end
 
 return Run
