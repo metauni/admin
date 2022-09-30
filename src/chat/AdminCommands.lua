@@ -76,14 +76,15 @@ if not success then
     permissions = {}
 end
 
+-- NOTE: scribeOnlyMode is now fixed ON
 -- Get scribeOnlyMode
-success, scribeOnlyMode = pcall(function()
+--[[ success, scribeOnlyMode = pcall(function()
     return permissionsDataStore:GetAsync(Settings.DataStoreTag.."scribeOnlyMode") or false
 end)
 if not success then
     print("[MetaAdmin] Failed to read scribeOnlyMode from DataStore")
     scribeOnlyMode = false
-end
+end --]]
 
 -- If scribeOnlyMode has not been set, we leave it with the default
 if scribeOnlyMode == true then
