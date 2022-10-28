@@ -343,6 +343,7 @@ function UpdateAttributes(plr)
 
 	plr:SetAttribute("metaadmin_canwrite",canWriteOnWhiteboards(userId))
 	plr:SetAttribute("metaadmin_isscribe",isScribe(userId))
+	plr:SetAttribute("metaadmin_isadmin",isAdmin(userId))
 end
 
 function GetPermLevelName(name)
